@@ -13,6 +13,7 @@ from googleapiclient import errors
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+from dotenv import load_dotenv
 # Libraries for dates
 import datetime
 import math
@@ -92,12 +93,16 @@ def run_export_process(week_num):
 def get_scripts_service():
     """Calls the Apps Script API.
     """
+    # If modifying these scopes, delete the file token.pickle.
+    SCOPES = ['https://www.googleapis.com/auth/forms', 
+              'https://www.googleapis.com/auth/spreadsheets']
+    dirname = os.path.dirname(__file__)
     creds = None
     # The file token.pickle stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
     # time.
-    if os.path.exists('.credentials/scripts/token.pickle'):
-        with open('.credentials/scripts/token.pickle', 'rb') as token:
+    if os.path.exists(os.path.join(dirname, '.credentials/scripts/token.pickle')):
+        with open(os.path.join(dirname, '.credentials/scripts/token.pickle'), 'rb') as token:
             creds = pickle.load(token)
     # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
@@ -107,17 +112,14 @@ def get_scripts_service():
             # Credentials path from the credentials .json file 
             # from step 3 from Google Cloud Platform section
             flow = InstalledAppFlow.from_client_secrets_file(
-                '.credentials/scripts/scripts_credentials.json', SCOPES) 
+                os.path.join(dirname, '.credentials/scripts/scripts_credentials.json'), SCOPES) 
             creds = flow.run_local_server(port=0)
         # Save the credentials for the next run
-        with open('.credentials/scripts/token.pickle', 'wb') as token:
+        with open(os.path.join(dirname,'.credentials/scripts/token.pickle'), 'wb') as token:
             pickle.dump(creds, token)
     return build('script', 'v1', credentials=creds)
 
 def run_apps_script():
-    # If modifying these scopes, delete the file token.pickle.
-    SCOPES = ['https://www.googleapis.com/auth/forms', 
-              'https://www.googleapis.com/auth/spreadsheets']
     service = get_scripts_service()
     # PickEm project Scripts App API
     load_dotenv()
@@ -141,14 +143,19 @@ def get_week_season(dt):
     # handling final weeks of season in 2022
     if day_of_year < 251:
         day_of_year += 365
-    week_num = math.ceil((day_of_year - 251) / 7)
+    # make the week start on Tues (day after MNF) instead of Thurs (day of first game of the new week)
+    week_num = math.ceil((day_of_year - 249) / 7)
     return((dt.year, week_num))
 
 
-# Cron run
+## Cron run
+# get today
 today = datetime.date.today()
+# get which week of the season it is
 yr, wk_num = get_week_season(today)
-run_export_process(week_num)
+# scrape the lines from the current week, export to Gsheets
+run_export_process(wk_num)
+# turn Gsheets data into google form
 run_apps_script()
 
 
